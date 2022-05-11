@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Status</title>
+<style>
+body{
+  background-color:#68BBE3;
+  color:white;
+  }
+div{
+  padding-left:15px;
+  padding-right:15px;
+  margin-top:5px;
+  margin-bottom:5px;
+  margin-left:40px;
+  margin-right:40px;
+  background-color:white;
+  color:black;
+  }
+.btn{
+  border: 2px solid white;
+  background-color:#68BBE3;
+  border-radius:50px;
+  color: white;
+  padding: 5px 5px;
+  text-align: center;
+  display: inline-block;
+  cursor: pointer;
+  text-decoration:none;
+  }
+</style>
+</head>
+<body>
+
+<h1 style="text-align:center;">Inventory Status</h1>
+<div>
+{% if not a %}
+  <hr>
+  <h3 style="text-align:center;"><strong>ALL OK</strong></h3>
+{% endif %}
+{% for data in a %}
+  {% if data[0] == 0  %}
+    <hr>
+    <p><strong>{{data[1]}}</strong> : 1-day inventory at {{data[2]}} (less than minimum : {{data[3]}}) and 3-day inventory at {{data[4]}} (less than minimum : {{data[5]}})<br><br>    <a href={{data[6]}} target="_blank" class="btn">Metabase Graph</a></p>
+  {% endif %}
+  {% if data[0] == 1 %}
+    <hr>
+    <p><strong>{{data[1]}}</strong> : 1-day inventory at {{data[2]}} (less than minimum : {{data[3]}})<br><br>    <a href={{data[4]}} target="_blank" class="btn">Metabase Graph</a></p>
+  {% endif %}
+  {% if data[0] == 2 %}
+    <hr>
+    <p><strong>{{data[1]}}</strong> : 3-day inventory at {{data[2]}} (less than minimum : {{data[3]}})<br><br>    <a href={{data[4]}} target="_blank" class="btn">Metabase Graph</a></p>
+  {% endif %}
+{% endfor %}
+<hr>
+</div>
+</body>
+</html>
