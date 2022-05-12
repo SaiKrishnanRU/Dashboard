@@ -1,6 +1,5 @@
 from datetime import timedelta, date
 
-
 # Checking last days count for inventory
 def countCheck(source, currSource):
     count = 0
