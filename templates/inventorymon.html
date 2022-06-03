@@ -43,13 +43,14 @@ text-align: center;
   display: inline-block;
   cursor: pointer;
   text-decoration:none;
-  } 
+  }
 </style>
 <body>
   <div>
     <h1>Market Feeds: Inventory Monitor</h1>
+    <p>Last updated : {{updated[0][0]}}</p>
     <form action="/inventorymon/status">
-      <input type="submit" value="STATUS" class='btn' style="background-color:white; color:black;">
+      <input type="submit" value="STATUS" name="page" class='btn' style="background-color:#0000e6; color:white;">
     </form>
   </div>
   <div class ="blk">
@@ -62,7 +63,7 @@ text-align: center;
     <th>3-Day Minimum</th>
     <th>Update</th>
    </tr>
-   {% for data in a %}
+   {% for data in details %}
    <form action="/saved" method="POST">
    <tr style = "padding-top:5px; padding-bottom: 5px; padding-left: 30px; padding-right: 40px;" >
      <td><input type="hidden" id="src" name="src" value={{data[0]}}>{{data[0]}}<br><br><a href={{data[5]}} target="_blank" class='btn'>Metabase Graph</a></td>
@@ -74,6 +75,6 @@ text-align: center;
    </tr>
    </form>
    {% endfor %}
-  </div>
+   </div>
 </body>
 </html>
