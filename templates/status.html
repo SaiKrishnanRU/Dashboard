@@ -38,7 +38,7 @@ div{
   <hr>
   <h3 style="text-align:center;"><strong>ALL OK</strong></h3>
 {% endif %}
-{% for data in a %}
+{% for data in details %}
   {% if data[0] == 0  %}
     <hr>
     <p><strong>{{data[1]}}</strong> : 1-day inventory at {{data[2]}} (less than minimum : {{data[3]}}) and 3-day inventory at {{data[4]}} (less than minimum : {{data[5]}})<br><br>    <a href={{data[6]}} target="_blank" class="btn">Metabase Graph</a></p>
