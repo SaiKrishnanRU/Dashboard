@@ -1,23 +1,3 @@
-from datetime import timedelta, date
-
-# Checking last days count for inventory
-def countCheck(source, currSource):
-    count = 0
-    today = date.today()
-    today = today - timedelta(days=1)
-    yesterday = today - timedelta(days=1)
-    dayBefore = today - timedelta(days=2)
-    d2 = yesterday.strftime("%Y-%m-%d")
-    d3 = dayBefore.strftime("%Y-%m-%d")
-    for past in source:
-        if past[1] == d2 and past[0] == currSource:
-            count = count + past[2]
-    for past in source:
-        if past[1] == d3 and past[0] == currSource:
-            count = count + past[2]
-    return count
-
-
 # Checking if minimum inventory value is met
 def minCheck(day, detail, limit):
     # 0 - If minimum not met for today and last 3 days sum
