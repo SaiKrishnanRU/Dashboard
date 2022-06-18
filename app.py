@@ -6,6 +6,7 @@ from database import userDb, sourceDb, listingDb
 
 application = Flask(__name__)
 
+
 @application.route("/saved", methods=["POST", "GET"])
 def saved():
   # Updating minimum values for counts
@@ -28,74 +29,85 @@ def saved():
     connection.close()
     return redirect(request.referrer)
 
+
 @application.route("/inventorymon")
 def dashboard():
   connection = sourceDb()
-  latestDate = connection.execute('select max(date) from source_date_counts;')
+  latestDate = connection.execute('select max(date) from source_date_counts where date not in (select max(date) from source_date_counts);')
   latestDate = latestDate.fetchall()
   cursor = connection.execute('select * from source_date_counts;')
   sources = cursor.fetchall()
   connection.close()
+  page = "RUN"
 
   today = date.today()
   yesterday = today - timedelta(days=1)
   dayBefore = today - timedelta(days=2)
+  fourthDay = today - timedelta(days=3)
   today = today.strftime("%Y-%m-%d")
   yesterday = yesterday.strftime("%Y-%m-%d")
   dayBefore = dayBefore.strftime("%Y-%m-%d")
+  fourthDay = fourthDay.strftime("%Y-%m-%d")
   connection = userDb()
   updatedDate = connection.execute('select max(date) from source_count;')
   updatedDate = updatedDate.fetchall()
-  if updatedDate[0][0] != yesterday:
-    connection.execute('CREATE TABLE IF NOT EXISTS source_count( source TEXT PRIMARY KEY, today INTEGER, past INTEGER, date TEXT);')
-    connection.execute('CREATE TABLE IF NOT EXISTS updates( source TEXT, today_limit INTEGER, past_limit INTEGER);')
-    connection.execute('CREATE TABLE IF NOT EXISTS graph_links( source TEXT PRIMARY KEY, link TEXT);')
-    disSource = connection.execute('select distinct(source) from updates;')
-    disSource = disSource.fetchall()
-    upSource = []
-    for value in disSource:
-      upSource.append(value[0])
 
-    # Table for tracking links to metadata graph
-    for source in sources:
-      if source[1] == yesterday:
-        currSource = source[0]
-        connection.execute('INSERT OR IGNORE INTO graph_links (source,link) VALUES (?,?)', (currSource, ""))
-        connection.commit()
+  if latestDate[0][0] < dayBefore:
+    connection.execute("UPDATE source_count SET today = ?, past = ?;", (0, 0))
+    connection.commit()
+    page = "ISSUE"
+  if page != "ISSUE":
+    if updatedDate[0][0] < dayBefore:
+      connection.execute('CREATE TABLE IF NOT EXISTS source_count( source TEXT PRIMARY KEY, today INTEGER, past INTEGER, date TEXT);')
+      connection.execute('CREATE TABLE IF NOT EXISTS updates( source TEXT, today_limit INTEGER, past_limit INTEGER);')
+      connection.execute('CREATE TABLE IF NOT EXISTS graph_links( source TEXT PRIMARY KEY, link TEXT);')
+      disSource = connection.execute('select distinct(source) from updates;')
+      disSource = disSource.fetchall()
+      upSource = []
+      for value in disSource:
+        upSource.append(value[0])
 
-    # Updating tables with all source names and counts
-    if latestDate[0][0] < yesterday:
-      connection.execute("UPDATE source_count SET today = ?, past = ?;", (0, 0))
-      connection.commit()
-    for source in sources:
-      if source[1] == yesterday:
-        currSource = source[0]
-        tCount = source[2]
-        if currSource not in upSource:
-          connection.execute("INSERT INTO source_count (source , today , past , date) VALUES (?, ?, ?, ?)",(currSource, 0, 0, ""))
+      # Table for tracking links to metadata graph
+      for source in sources:
+        if source[1] == dayBefore:
+          currSource = source[0]
+          connection.execute('INSERT OR IGNORE INTO graph_links (source,link) VALUES (?,?)', (currSource, ""))
           connection.commit()
-        connection.execute("UPDATE source_count SET today = ?, past = ?, date = ? WHERE source = ?;",(tCount, 0, "",currSource))
+
+      # Updating tables with all source names and counts
+      if latestDate[0][0] < dayBefore:
+        connection.execute("UPDATE source_count SET today = ?, past = ?;", (0, 0))
         connection.commit()
-        if currSource not in upSource:
-          connection.execute('INSERT INTO updates (source , today_limit , past_limit) VALUES (? , ?, ?)',
+      for source in sources:
+        if source[1] == dayBefore:
+          currSource = source[0]
+          tCount = source[2]
+          if currSource not in upSource:
+            connection.execute("INSERT INTO source_count (source , today , past , date) VALUES (?, ?, ?, ?)",(currSource, 0, 0, ""))
+            connection.commit()
+          connection.execute("UPDATE source_count SET today = ?, past = ?, date = ? WHERE source = ?;",(tCount, 0, "",currSource))
+          connection.commit()
+          if currSource not in upSource:
+            connection.execute('INSERT INTO updates (source , today_limit , past_limit) VALUES (? , ?, ?)',
                             (currSource, 0, 0))
-          connection.commit()
-          upSource.append(currSource)
-    sources = connection.execute('SELECT source FROM source_count')
-    sources = sources.fetchall()
-    # Calculating 3 day inventory
-    connectionB = listingDb()
-    pastDetails = connectionB.execute('SELECT distinct(vid_vin), sources FROM listings WHERE date_max >= ?;', (dayBefore,));
-    pastDetails = pastDetails.fetchall()
+            connection.commit()
+            upSource.append(currSource)
+      sources = connection.execute('SELECT source FROM source_count')
+      sources = sources.fetchall()
+      # Calculating 3 day inventory
+      connectionB = listingDb()
+      pastDetails = connectionB.execute('SELECT vid_vin , sources FROM listings WHERE date_max >= ?;', (fourthDay,));
+      pastDetails = pastDetails.fetchall()
 
-    connectionB.close()
-    for source in sources:
-      count = 0
-      for detail in pastDetails:
-        if str(source[0]) in detail[1]:
-          count = count + 1
-      connection.execute('UPDATE source_count SET past = ?, date = ? WHERE source = ?;', (count, latestDate[0][0], str(source[0])))
-      connection.commit()
+      connectionB.close()
+      for source in sources:
+        count = 0
+        for detail in pastDetails:
+          for name in detail[1].split(','):
+            if str(source[0]) == name:
+              count = count + 1
+        connection.execute('UPDATE source_count SET past = ?, date = ? WHERE source = ?;', (count, latestDate[0][0], str(source[0])))
+        connection.commit()
   cursor = connection.execute('SELECT source_count.source, source_count.today, updates.today_limit, source_count.past, updates.past_limit, graph_links.link  FROM source_count INNER JOIN updates ON source_count.source = updates.source INNER JOIN graph_links ON graph_links.source = updates.source ORDER BY source_count.source')
   source = cursor.fetchall()
   connection.close()
@@ -106,7 +118,7 @@ def dashboard():
 def status():
   page = request.args.get("page")
   connection = sourceDb()
-  latestDate = connection.execute('select max(date) from source_date_counts;')
+  latestDate = connection.execute('select max(date) from source_date_counts where date not in (select max(date) from source_date_counts);')
   latestDate = latestDate.fetchall()
   cursor = connection.execute('select * from source_date_counts ORDER BY source;')
   sources = cursor.fetchall()
@@ -118,20 +130,20 @@ def status():
   today = date.today()
   yesterday = today - timedelta(days=1)
   dayBefore = today - timedelta(days=2)
+  fourthDay = today - timedelta(days=3)
   today = today.strftime("%Y-%m-%d")
   yesterday = yesterday.strftime("%Y-%m-%d")
   dayBefore = dayBefore.strftime("%Y-%m-%d")
+  fourthDay = fourthDay.strftime("%Y-%m-%d")
   updatedDate = connection.execute('select max(date) from source_count;')
   updatedDate = updatedDate.fetchall()
 
-  if updatedDate[0][0] != yesterday:
-    #connection.execute('DELETE FROM source_count;')
-    connection.commit()
+  if updatedDate[0][0] < dayBefore:
     connection.execute('CREATE TABLE IF NOT EXISTS source_count( source TEXT PRIMARY KEY, today INTEGER, past INTEGER, date TEXT);')
     connection.execute('CREATE TABLE IF NOT EXISTS updates( source TEXT, today_limit INTEGER, past_limit INTEGER);')
     connection.execute('CREATE TABLE IF NOT EXISTS graph_links( source TEXT PRIMARY KEY, link TEXT);')
 
-    disSource = connection.execute('select distinct(source) from updates;')
+    disSource = connection.execute('select distinct(source) from source_count;')
     disSource = disSource.fetchall()
     upSource = []
     for value in disSource:
@@ -139,40 +151,43 @@ def status():
 
     # Table for tracking links to metadata graph
     for source in sources:
-      if source[1] == today:
+      if source[1] == dayBefore:
         currSource = source[0]
         connection.execute('INSERT OR IGNORE INTO graph_links (source,link) VALUES (?,?)', (currSource, ""))
         connection.commit()
 
     # Updating tables with all source names and counts
-    if latestDate[0][0] < yesterday:
+    if latestDate[0][0] < dayBefore:
       connection.execute("UPDATE source_count SET today = ?, past = ?;", (0, 0))
       connection.commit()
       page = "ISSUE"
-    for source in sources:
-      if source[1] == yesterday:
-        currSource = source[0]
-        # Adding count for last 3 days
-        tCount = source[2]
-        if currSource not in upSource:
-          connection.execute("INSERT INTO source_count (source , today , past , date) VALUES (?, ?, ?, ?)",(currSource, 0, 0, ""))
+
+    if page != "ISSUE":
+      for source in sources:
+        if source[1] == dayBefore:
+          currSource = source[0]
+          # Adding count for last 3 days
+          tCount = source[2]
+          if currSource not in upSource:
+            connection.execute("INSERT INTO source_count (source , today , past , date) VALUES (?, ?, ?, ?)",(currSource, 0, 0, ""))
+            connection.commit()
+          connection.execute("UPDATE source_count SET today = ?, past = ?, date = ? WHERE source = ?;",(tCount, 0, "",currSource))
           connection.commit()
-        connection.execute("UPDATE source_count SET today = ?, past = ?, date = ? WHERE source = ?;",(tCount, 0, "",currSource))
+      sources = connection.execute('SELECT source FROM source_count')
+      sources = sources.fetchall()
+      # Calculating 3 day inventory
+      connectionB = listingDb()
+      pastDetails = connectionB.execute('SELECT vid_vin , sources FROM listings WHERE date_max >= ?;', (fourthDay,));
+      pastDetails = pastDetails.fetchall()
+      connectionB.close()
+      for source in sources:
+        count = 0
+        for detail in pastDetails:
+          for name in detail[1].split(','):
+            if str(source[0]) == name:
+              count = count + 1
+        connection.execute('UPDATE source_count SET past = ?, date = ? WHERE source = ?;', (count, latestDate[0][0], str(source[0])))
         connection.commit()
-    sources = connection.execute('SELECT source FROM source_count')
-    sources = sources.fetchall()
-    # Calculating 3 day inventory
-    connectionB = listingDb()
-    pastDetails = connectionB.execute('SELECT distinct(vid_vin), sources FROM listings WHERE date_max >= ?;', (dayBefore,));
-    pastDetails = pastDetails.fetchall()
-    connectionB.close()
-    for source in sources:
-      count = 0
-      for detail in pastDetails:
-        if str(source[0]) in detail[1]:
-          count = count + 1
-      connection.execute('UPDATE source_count SET past = ?, date = ? WHERE source = ?;', (count, latestDate[0][0], str(source[0])))
-      connection.commit()
 
   currDetail = connection.execute('SELECT source, today , past FROM source_count;')
   currDetail = currDetail.fetchall()
@@ -203,6 +218,7 @@ def status():
       return "OK"
     else:
       return "Few inventories did not meet minimum value. Visit http://inventorymon.vinaudit.com:8000/inventorymon/status?page=STATUS"
+
 
 if __name__ == "__main__":
   app.debug = True
