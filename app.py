@@ -7,7 +7,7 @@ from database import userDb, sourceDb, listingDb
 application = Flask(__name__)
 
 
-@application.route("/saved", methods=["POST", "GET"])
+@application.route("/saved", methods=["POST"])
 def saved():
   # Updating minimum values for counts
   if request.method == "POST":
@@ -39,15 +39,10 @@ def dashboard():
   sources = cursor.fetchall()
   connection.close()
   page = "RUN"
-
-  today = date.today()
-  yesterday = today - timedelta(days=1)
-  dayBefore = today - timedelta(days=2)
-  fourthDay = today - timedelta(days=3)
-  today = today.strftime("%Y-%m-%d")
-  yesterday = yesterday.strftime("%Y-%m-%d")
-  dayBefore = dayBefore.strftime("%Y-%m-%d")
-  fourthDay = fourthDay.strftime("%Y-%m-%d")
+  today = (date.today().strftime('%Y-%m-%d'))
+  yesterday = (date.today() - timedelta(days=1)).strftime('%Y-%m-%d')
+  dayBefore = (date.today() - timedelta(days=2)).strftime('%Y-%m-%d')
+  fourthDay = (date.today() - timedelta(days=3)).strftime('%Y-%m-%d')
   connection = userDb()
   updatedDate = connection.execute('select max(date) from source_count;')
   updatedDate = updatedDate.fetchall()
@@ -56,7 +51,7 @@ def dashboard():
     connection.execute("UPDATE source_count SET today = ?, past = ?;", (0, 0))
     connection.commit()
     page = "ISSUE"
-  if page != "ISSUE":
+  else:
     if updatedDate[0][0] < dayBefore:
       connection.execute('CREATE TABLE IF NOT EXISTS source_count( source TEXT PRIMARY KEY, today INTEGER, past INTEGER, date TEXT);')
       connection.execute('CREATE TABLE IF NOT EXISTS updates( source TEXT, today_limit INTEGER, past_limit INTEGER);')
@@ -127,14 +122,10 @@ def status():
   # Displaying status on source count
   connection = userDb()
   connection.execute('CREATE TABLE IF NOT EXISTS source_count( source TEXT PRIMARY KEY, today INTEGER, past INTEGER);')
-  today = date.today()
-  yesterday = today - timedelta(days=1)
-  dayBefore = today - timedelta(days=2)
-  fourthDay = today - timedelta(days=3)
-  today = today.strftime("%Y-%m-%d")
-  yesterday = yesterday.strftime("%Y-%m-%d")
-  dayBefore = dayBefore.strftime("%Y-%m-%d")
-  fourthDay = fourthDay.strftime("%Y-%m-%d")
+  today = (date.today().strftime('%Y-%m-%d'))
+  yesterday = (date.today() - timedelta(days=1)).strftime('%Y-%m-%d')
+  dayBefore = (date.today() - timedelta(days=2)).strftime('%Y-%m-%d')
+  fourthDay = (date.today() - timedelta(days=3)).strftime('%Y-%m-%d')
   updatedDate = connection.execute('select max(date) from source_count;')
   updatedDate = updatedDate.fetchall()
 
@@ -162,7 +153,7 @@ def status():
       connection.commit()
       page = "ISSUE"
 
-    if page != "ISSUE":
+    else:
       for source in sources:
         if source[1] == dayBefore:
           currSource = source[0]
