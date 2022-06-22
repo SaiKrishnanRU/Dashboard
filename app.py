@@ -2,7 +2,7 @@ from flask import Flask, render_template, request, redirect
 import sqlite3
 from datetime import timedelta, date
 from count import minCheck
-from database import userDb, sourceDb, listingDb
+from database import userDb, sourceDb, listingDb, createTb, getLatestInfo
 
 application = Flask(__name__)
 
@@ -12,33 +12,30 @@ def saved():
   # Updating minimum values for counts
   if request.method == "POST":
     connection = userDb()
-    one = request.form["one"]
-    three = request.form["three"]
+    todayLimit = request.form["one"]
+    pastLimit = request.form["three"]
     src = request.form["src"]
-    if one == "" and three == "":
+    if todayLimit == "" and pastLimit == "":
       pass
-    elif one == "":
-      connection.execute('update updates set past_limit = ? where source = ?;', (three, src))
+    elif todayLimit == "":
+      connection.execute('update updates set past_limit = ? where source = ?;', (pastLimit, src))
       connection.commit()
-    elif three == "":
-      connection.execute('update updates set today_limit = ? where source = ?;', (one, src))
+    elif pastLimit == "":
+      connection.execute('update updates set today_limit = ? where source = ?;', (todayLimit, src))
       connection.commit()
     else:
-      connection.execute('update updates set today_limit = ?  , past_limit = ? where source = ?;', (one, three, src))
+      connection.execute('update updates set today_limit = ?  , past_limit = ? where source = ?;', (todayLimit, pastLimit, src))
       connection.commit()
     connection.close()
     return redirect(request.referrer)
 
 
-@application.route("/inventorymon")
+@application.route("/")
 def dashboard():
-  connection = sourceDb()
-  latestDate = connection.execute('select max(date) from source_date_counts where date not in (select max(date) from source_date_counts);')
-  latestDate = latestDate.fetchall()
-  cursor = connection.execute('select * from source_date_counts;')
-  sources = cursor.fetchall()
-  connection.close()
+  createTb()
+  latestDate, sources = getLatestInfo()
   page = "RUN"
+
   today = (date.today().strftime('%Y-%m-%d'))
   yesterday = (date.today() - timedelta(days=1)).strftime('%Y-%m-%d')
   dayBefore = (date.today() - timedelta(days=2)).strftime('%Y-%m-%d')
@@ -53,21 +50,9 @@ def dashboard():
     page = "ISSUE"
   else:
     if updatedDate[0][0] < dayBefore:
-      connection.execute('CREATE TABLE IF NOT EXISTS source_count( source TEXT PRIMARY KEY, today INTEGER, past INTEGER, date TEXT);')
-      connection.execute('CREATE TABLE IF NOT EXISTS updates( source TEXT, today_limit INTEGER, past_limit INTEGER);')
-      connection.execute('CREATE TABLE IF NOT EXISTS graph_links( source TEXT PRIMARY KEY, link TEXT);')
       disSource = connection.execute('select distinct(source) from updates;')
-      disSource = disSource.fetchall()
       upSource = []
-      for value in disSource:
-        upSource.append(value[0])
-
-      # Table for tracking links to metadata graph
-      for source in sources:
-        if source[1] == dayBefore:
-          currSource = source[0]
-          connection.execute('INSERT OR IGNORE INTO graph_links (source,link) VALUES (?,?)', (currSource, ""))
-          connection.commit()
+      upSource = [value[0] for value in disSource.fetchall()]
 
       # Updating tables with all source names and counts
       if latestDate[0][0] < dayBefore:
@@ -76,6 +61,8 @@ def dashboard():
       for source in sources:
         if source[1] == dayBefore:
           currSource = source[0]
+          connection.execute('INSERT OR IGNORE INTO graph_links (source,link) VALUES (?,?)', (currSource, ""))
+          connection.commit()
           tCount = source[2]
           if currSource not in upSource:
             connection.execute("INSERT INTO source_count (source , today , past , date) VALUES (?, ?, ?, ?)",(currSource, 0, 0, ""))
@@ -109,19 +96,14 @@ def dashboard():
   return render_template('inventorymon.html', details=source, updated=latestDate)
 
 
-@application.route("/inventorymon/status")
+@application.route("/status")
 def status():
   page = request.args.get("page")
-  connection = sourceDb()
-  latestDate = connection.execute('select max(date) from source_date_counts where date not in (select max(date) from source_date_counts);')
-  latestDate = latestDate.fetchall()
-  cursor = connection.execute('select * from source_date_counts ORDER BY source;')
-  sources = cursor.fetchall()
-  connection.close()
+  createTb()
+  latestDate, sources = getLatestInfo()
 
   # Displaying status on source count
   connection = userDb()
-  connection.execute('CREATE TABLE IF NOT EXISTS source_count( source TEXT PRIMARY KEY, today INTEGER, past INTEGER);')
   today = (date.today().strftime('%Y-%m-%d'))
   yesterday = (date.today() - timedelta(days=1)).strftime('%Y-%m-%d')
   dayBefore = (date.today() - timedelta(days=2)).strftime('%Y-%m-%d')
@@ -130,22 +112,9 @@ def status():
   updatedDate = updatedDate.fetchall()
 
   if updatedDate[0][0] < dayBefore:
-    connection.execute('CREATE TABLE IF NOT EXISTS source_count( source TEXT PRIMARY KEY, today INTEGER, past INTEGER, date TEXT);')
-    connection.execute('CREATE TABLE IF NOT EXISTS updates( source TEXT, today_limit INTEGER, past_limit INTEGER);')
-    connection.execute('CREATE TABLE IF NOT EXISTS graph_links( source TEXT PRIMARY KEY, link TEXT);')
-
     disSource = connection.execute('select distinct(source) from source_count;')
-    disSource = disSource.fetchall()
     upSource = []
-    for value in disSource:
-      upSource.append(value[0])
-
-    # Table for tracking links to metadata graph
-    for source in sources:
-      if source[1] == dayBefore:
-        currSource = source[0]
-        connection.execute('INSERT OR IGNORE INTO graph_links (source,link) VALUES (?,?)', (currSource, ""))
-        connection.commit()
+    upSource = [value[0] for value in disSource.fetchall()]
 
     # Updating tables with all source names and counts
     if latestDate[0][0] < dayBefore:
@@ -157,6 +126,8 @@ def status():
       for source in sources:
         if source[1] == dayBefore:
           currSource = source[0]
+          connection.execute('INSERT OR IGNORE INTO graph_links (source,link) VALUES (?,?)', (currSource, ""))
+          connection.commit()
           # Adding count for last 3 days
           tCount = source[2]
           if currSource not in upSource:
@@ -208,9 +179,9 @@ def status():
     if status == []:
       return "OK"
     else:
-      return "Few inventories did not meet minimum value. Visit http://inventorymon.vinaudit.com:8000/inventorymon/status?page=STATUS"
+      return "Few inventories did not meet minimum value. Visit http://inventorymon.vinaudit.com/status?page=STATUS"
 
 
 if __name__ == "__main__":
   app.debug = True
-  application.run()
+  application.run(host='0.0.0.0')
